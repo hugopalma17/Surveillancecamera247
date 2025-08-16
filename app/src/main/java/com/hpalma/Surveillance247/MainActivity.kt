@@ -3,7 +3,10 @@ package com.hpalma.Surveillance247
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -31,7 +34,11 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            // Handle permission result
+            if (permissions.all { it.value }) {
+                requestBatteryOptimization()
+            } else {
+                // Handle the case where the user denies permissions
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,7 +50,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             SurveillanceCameraTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ServiceControlButton(
+                   Greeting(
+                        name = "Android",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -52,47 +60,69 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestPermissions() {
-        val permissionsToRequest = arrayOf(
+        val permissionsToRequest = mutableListOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO
-        ).filter {
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val permissionsNotGranted = permissionsToRequest.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }.toTypedArray()
 
-        if (permissionsToRequest.isNotEmpty()) {
-            requestPermissionLauncher.launch(permissionsToRequest)
+        if (permissionsNotGranted.isNotEmpty()) {
+            requestPermissionLauncher.launch(permissionsNotGranted)
+        } else {
+            requestBatteryOptimization()
         }
+    }
+
+    private fun requestBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent()
+            val packageName = packageName
+            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            } else {
+                startCameraService()
+            }
+        } else {
+            startCameraService()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Check if returning from battery optimization settings
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            startCameraService()
+        }
+    }
+
+    private fun startCameraService() {
+        val intent = Intent(this, CameraService::class.java)
+        startService(intent)
     }
 }
 
 @Composable
-fun ServiceControlButton(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var isServiceRunning by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(onClick = {
-            val intent = Intent(context, CameraService::class.java)
-            if (!isServiceRunning) {
-                context.startService(intent)
-            } else {
-                context.stopService(intent)
-            }
-            isServiceRunning = !isServiceRunning
-        }) {
-            Text(if (!isServiceRunning) "Start Service" else "Stop Service")
-        }
-    }
+fun Greeting(name: String, modifier: Modifier = Modifier) {
+    Text(
+        text = "Hello $name!",
+        modifier = modifier
+    )
 }
 
 @Preview(showBackground = true)
 @Composable
-fun ServiceControlButtonPreview() {
+fun GreetingPreview() {
     SurveillanceCameraTheme {
-        ServiceControlButton()
+        Greeting("Android")
     }
 }
