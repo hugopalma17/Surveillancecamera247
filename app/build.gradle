@@ -48,6 +48,11 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    dependenciesInfo {
+        includeInApk = true
+        includeInBundle = true
+    }
+    buildToolsVersion = "36.0.0"
 }
 
 dependencies {
@@ -62,9 +67,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
-    // RTSP Server dependencies
-    implementation(libs.rtsp.server)
-    implementation(libs.encoder)
+    // RTSP Stream dependency
+    implementation 'com.github.pedroSG94.rtmp-rtsp-stream-client-java:rtsp:2.1.5'
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

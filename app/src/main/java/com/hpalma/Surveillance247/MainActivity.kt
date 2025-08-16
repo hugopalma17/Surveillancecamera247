@@ -36,6 +36,8 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.hpalma.Surveillance247.ui.theme.SurveillanceCameraTheme
 import java.util.concurrent.Executors
+import android.widget.VideoView
+import android.net.Uri
 
 class MainActivity : ComponentActivity() {
 
@@ -118,32 +120,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CameraPreview(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    val previewView = remember { PreviewView(context) }
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val videoView = remember { VideoView(context) }
+    val rtspUrl = "rtsp://127.0.0.1:1935/"
 
-    LaunchedEffect(cameraProviderFuture) {
-        val cameraProvider = cameraProviderFuture.get()
-        val preview = CameraXPreview.Builder().build().also {
-            it.setSurfaceProvider(previewView.surfaceProvider)
-        }
-
-        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-        try {
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                preview
-            )
-        } catch (exc: Exception) {
-            // Log error
-        }
+    LaunchedEffect(Unit) {
+        videoView.setVideoURI(Uri.parse(rtspUrl))
+        videoView.start()
     }
 
-    AndroidView({ previewView }, modifier = modifier)
+    AndroidView({ videoView }, modifier = modifier)
 }
 
 @Preview(showBackground = true)
