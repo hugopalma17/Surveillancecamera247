@@ -171,8 +171,8 @@ A **power-efficient, intelligent security camera app** that transforms any Andro
 
 ### **Development Setup**
 ```bash
-git clone https://github.com/hpalma/Surveillancecamera.git
-cd Surveillancecamera
+git clone https://github.com/hugopalma17/Surveillancecamera247.git
+cd Surveillancecamera247
 ./gradlew clean assembleDebug
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
