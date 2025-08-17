@@ -171,8 +171,8 @@ A **power-efficient, intelligent security camera app** that transforms any Andro
 
 ### **Development Setup**
 ```bash
-git clone https://github.com/yourusername/surveillance-camera-android.git
-cd surveillance-camera-android
+git clone https://github.com/hpalma/Surveillancecamera.git
+cd Surveillancecamera
 ./gradlew clean assembleDebug
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -250,9 +250,7 @@ We welcome contributions from the community! This project is **100% open source*
 ## 📞 Support & Community
 
 - **📖 Documentation:** [Wiki](wiki/) with detailed guides
-- **💬 Discord:** Join our [community server](https://discord.gg/surveillance-camera)
 - **🐛 Issues:** Report bugs on [GitHub Issues](issues/)
-- **📧 Contact:** hugo.bob.ghost@gmail.com
 
 ## 📄 License
 
