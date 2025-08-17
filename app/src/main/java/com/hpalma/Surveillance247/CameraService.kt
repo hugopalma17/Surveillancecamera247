@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -57,6 +58,10 @@ class CameraService : LifecycleService(), ConnectCheckerRtsp {
 
     private fun startCamera() {
         if (rtspServer?.isStreaming == false) {
+            // Configure video stream with 180-degree rotation
+            rtspServer?.prepareVideo(640, 480, 30, 1200 * 1024, 180)
+            // Configure audio stream
+            rtspServer?.prepareAudio(128 * 1024, 32000, true)
             rtspServer?.startStream()
         }
     }
