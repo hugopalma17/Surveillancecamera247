@@ -1,1 +1,26 @@
+# App build directory
 /build
+
+# Generated APK files
+*.apk
+
+# Debug database files
+*.db
+*.db-journal
+
+# Temporary files
+*.tmp
+
+# Local test results
+/androidTest-results
+/test-results
+
+# Lint results
+lint-results.xml
+lint-results_files/
+
+# Generated R files
+/src/main/gen
+
+# Local properties specific to this module
+local.properties

@@ -19,6 +19,5 @@ class ServiceLifecycleOwner : LifecycleOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
     }
 
-    override val lifecycle: Lifecycle
-        get() = lifecycleRegistry
+    override val lifecycle: Lifecycle = lifecycleRegistry
 }
