@@ -64,6 +64,20 @@ A **power-efficient, intelligent security camera app** that transforms any Andro
 - **Memory Management** - Automatic cleanup and optimization
 - **Thermal Protection** - Frame skipping to prevent overheating
 
+### **AI-Assisted Development**
+- **GitHub Copilot** - Code generation, debugging, and optimization assistance
+- **Google Gemini** - Architecture planning, problem-solving, and documentation
+- **Collaborative AI Development** - Leveraging multiple AI models for comprehensive project development
+- **Human-AI Partnership** - Combining human creativity with AI efficiency for rapid prototyping
+
+**Critical Human Expertise Required:**
+- **Technical Problem-Solving** - AI tools require experienced developers to guide debugging strategies and suggest alternative approaches
+- **Architectural Decision-Making** - Complex system design decisions need human expertise to avoid infinite loops and dead ends
+- **Context-Aware Debugging** - When builds fail or apps crash, human intuition and technical experience drive the problem-solving process
+- **Strategic Direction** - AI excels at implementation but needs human vision for project direction and feature prioritization
+
+*This project showcases modern AI-assisted development practices, where human vision and AI capabilities work together to tackle complex challenges like Android e-waste reduction. **Important Note:** Without experienced technical guidance behind the prompts, AI tools can easily get stuck in debugging loops or miss critical architectural insights. The human developer's ability to suggest new debugging paths, recognize patterns, and pivot strategies was essential for overcoming complex issues like Gradle cache corruption, ML Kit integration challenges, and Android emulator limitations.*
+
 ## 📋 Roadmap - Main Goals
 
 ### ✅ Phase 1: Foundation (COMPLETED)
