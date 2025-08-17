@@ -19,6 +19,7 @@ release/
 .gradle/
 build/
 app/build/
+# Exclude downloaded Gradle distributions (large files)
 gradle/wrapper/dists/
 
 # Local configuration file (sdk path, etc)
@@ -91,3 +92,7 @@ fabric.properties
 # APK signing
 *.jks
 *.keystore
+
+# Large binary files that shouldn't be in repo
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
