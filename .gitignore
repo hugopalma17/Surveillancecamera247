@@ -144,6 +144,9 @@ node_modules/
 # Custom script file we created
 delete_rtsp.sh
 
+# Development roadmap (internal planning document)
+roadmap.md
+
 # Backup files
 *.bak
 *.backup
