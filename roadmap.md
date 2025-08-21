@@ -1,113 +1,86 @@
 # Surveillance Camera App - Development Roadmap
 
 ## Project Overview
-**Goal:** Create a power-efficient security camera app that runs locally on Android devices.
+A power-efficient Android security camera app that runs locally on the device, designed to eliminate Android e-waste by repurposing old devices into surveillance systems.
 
-**Core Features:**
-- Record video when both movement and object detection occur
-- Save faces and license plates as timestamped images
-- 100GB circular storage management
-- Continuous background operation via Foreground Service
+## Phase 1: Core Service ✅ **COMPLETED**
+- [x] Foreground Service implementation with proper lifecycle management
+- [x] Camera access and preview system (CameraX integration)
+- [x] Permission handling (Camera, Audio, Foreground Service, Battery Optimization)
+- [x] Service-only camera architecture (no UI camera conflicts)
+- [x] Background operation with wake locks
+- [x] Notification system for service status
 
-## Completed Phases ✅
+**Key Achievement**: Service runs continuously in background, even with screen off.
 
-### Phase 1: Core Service Implementation ✅ COMPLETED
-**Status:** Fully functional basic mode
-- ✅ Foreground Service with proper notification
-- ✅ CameraX integration for camera access
-- ✅ Background execution with wake lock (prevents sleep)
-- ✅ Camera and audio permission handling
-- ✅ Jetpack Compose UI foundation
-- ✅ Project-local Gradle wrapper (isolated from system cache corruption)
-- ✅ Clean APK generation and installation
-- ✅ Emulator testing with webcam integration
+## Phase 2: ML Intelligence 🔄 **IN PROGRESS**
+- [x] Google ML Kit integration (Object Detection, Face Detection, Text Recognition)
+- [x] On-device, hardware-accelerated processing
+- [x] Motion detection using pixel comparison algorithms
+- [x] Real-time ML callbacks and data forwarding
+- [x] Performance optimization (frame skipping, throttling)
+- [x] UI display of detection results
+- [ ] **CURRENT ISSUE**: Motion detection stuck at 0.000 (service-to-UI data flow needs debugging)
+- [ ] Fine-tune detection thresholds and performance
+- [ ] Implement recording triggers based on ML analysis
 
-**Technical Stack Confirmed:**
-- Kotlin + Jetpack Compose
-- CameraX for camera operations
-- LifecycleService for background operation
-- Android Foreground Service architecture
+**Status**: Core ML infrastructure working, troubleshooting motion detection display.
 
-## Current Phase 🔄
+## Phase 3: Video Recording & Storage 📅 **PLANNED**
+- [ ] Implement actual video recording (currently simulated)
+- [ ] Circular storage system with 100GB limit
+- [ ] Automatic oldest file deletion
+- [ ] Video compression and optimization
+- [ ] Database for event logging and metadata
+- [ ] Face image saving with timestamps
+- [ ] OCR license plate detection and storage
 
-### Phase 2: Intelligence Layer ✅ COMPLETED
-**Status:** ML detection implemented but needs optimization
-- ✅ Google ML Kit integration (Object, Face, Text detection)
-- ✅ Motion detection algorithm
-- ✅ Smart recording triggers
-- ✅ Face image auto-save
-- ⚠️ **Issue:** ML processing causing device freezing
-- ⚠️ **Issue:** No user visibility into ML status
+## Phase 4: User Interface 📅 **PLANNED**
+- [ ] Jetpack Compose timeline interface
+- [ ] Clickable, zoomable event timeline
+- [ ] Calendar date selection
+- [ ] Video playback controls
+- [ ] Event filtering and search
+- [ ] Settings and configuration UI
+- [ ] Export and sharing functionality
 
-### Phase 2.5: Enhanced UI & ML Optimization ✅ COMPLETED
-**Status:** Split-screen UI with verbose ML monitoring implemented
-- ✅ Split-screen interface (camera feed + live status panel)
-- ✅ Real-time ML status monitoring with color-coded logs
-- ✅ Performance optimizations (frame skipping, throttling)
-- ✅ Visual status overlays on camera feed
-- ✅ Auto-scrolling status log with timestamps
-- ✅ Memory management (100 message limit)
-- ✅ Build issues resolved (Material3 API warnings fixed)
+## Phase 5: Advanced Features 📅 **FUTURE**
+- [ ] RTSP streaming support for network access
+- [ ] Integration with 3rd party IR lights for night vision
+- [ ] HTTP API for home automation integration
+- [ ] Video rotation for upside-down mounting
+- [ ] Face recognition and cropping tools
+- [ ] Object tracking and annotation
+- [ ] Push notifications for critical events
 
-## Current Status: Ready for Testing 🚀
-**Next Steps:**
-- Install and test enhanced split-screen UI
-- Verify ML detection performance and visibility
-- Monitor for device freezing issues (should be resolved)
+## Technical Architecture
+- **Language**: Kotlin
+- **UI Framework**: Jetpack Compose
+- **Camera**: CameraX
+- **ML Processing**: Google ML Kit (on-device)
+- **Background Processing**: Foreground Services
+- **Architecture Pattern**: Service-first design (camera logic in service, UI for display only)
 
-## Upcoming Phases 📋
+## Current Development Challenges
+1. **Motion Detection Data Flow**: Service processes motion correctly but UI shows 0.000
+2. **Cache Management**: Build system requires frequent cache clearing for proper updates
+3. **Service-UI Communication**: Optimizing data transfer between service and UI components
+4. **Performance Tuning**: Balancing ML processing frequency with battery efficiency
 
-### Phase 3: Video Recording & Storage
-- Triggered recording on detection events
-- Timestamped file naming system
-- 100GB circular storage logic
-- Minimal database for event logging
+## Offline ML Model Support (Future Consideration)
+For devices without Google Play Services, we've identified the possibility of:
+- Including TensorFlow Lite models directly in the APK
+- GPU acceleration through device-specific drivers
+- Custom model training for specific use cases
+- Fallback CPU processing for older devices
 
-### Phase 4: User Interface
-- Live camera feed display
-- Zoomable timeline (0-24 hour view)
-- Calendar date selection
-- Event markers and playback
-
-### Phase 5: Network Features (Optional)
-- RTSP streaming for local network access
-- HTTP endpoints for remote monitoring
-- Integration with IR lighting systems
-
-## Technical Challenges Resolved ✅
-- **Gradle Cache Corruption:** Fixed with project-local wrapper isolation
-- **Native Library Conflicts:** Resolved with clean build environment
-- **APK Installation Failures:** Fixed with proper architecture configuration
-- **Java 17+ Warnings:** Resolved with native access flags
-
-## ML Kit Alternatives for Embedded Systems
-*(For future AOSP/embedded deployments)*
-
-### TensorFlow Lite Integration (Roadmap Item)
-**Benefits:**
-- No Google Play Services dependency
-- Full offline operation
-- GPU/NPU hardware acceleration support
-- Self-contained APK
-
-**Implementation Strategy:**
-- Use GpuDelegate for modern chipsets
-- Fallback to NnApiDelegate for Neural Processing Units  
-- CPU threading for older devices
-- Pre-trained models: MobileNet, YOLO variants
-
-**Hardware Acceleration:**
-- Qualcomm Snapdragon: Hexagon DSP + Adreno GPU
-- MediaTek: APU (AI Processing Unit)
-- Samsung Exynos: NPU integration
-- Unisoc: AI acceleration support
-
-## Development Environment
-- **IDE:** Android Studio with clean Gradle installation
-- **Emulator:** Configured with webcam access for real testing
-- **Build System:** Project-isolated Gradle wrapper
-- **Git Repository:** Private repository with proper .gitignore
+## Key Milestones
+- ✅ **August 2024**: Basic service architecture and camera preview
+- 🔄 **August 2024**: ML detection integration and debugging
+- 📅 **September 2024**: Video recording implementation
+- 📅 **October 2024**: UI timeline and playback features
+- 📅 **November 2024**: Advanced features and optimization
 
 ---
-**Last Updated:** August 16, 2025
-**Current Status:** Phase 1 Complete ✅ | Phase 2 Ready to Begin 🚀
+*Last Updated: August 20, 2024*
+*Status: Phase 2 - ML Intelligence (Motion Detection Debugging)*

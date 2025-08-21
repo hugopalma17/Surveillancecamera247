@@ -1,14 +1,21 @@
 package com.hpalma.Surveillance247
 
 import android.Manifest
+import android.app.ActivityManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
+import android.os.Binder
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -36,6 +43,9 @@ import androidx.camera.core.Preview as CameraXPreview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.hpalma.Surveillance247.ui.theme.SurveillanceCameraTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -51,12 +61,14 @@ data class StatusMessage(
 
 class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
 
+    private val TAG = "MainActivity"
+
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             if (permissions.all { it.value }) {
                 requestBatteryOptimization()
             } else {
-                // Handle permission denied
+                addStatusMessage("ERROR", "Some permissions were denied")
             }
         }
 
@@ -70,12 +82,41 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
 
     // ML Service connection - Initialize only after permissions
     private var mlService: MLDetectionService? = null
+    private var cameraService: CameraService? = null
+    private var serviceBound = false
+
+    // Store reference to current PreviewView
+    private var currentPreviewView: PreviewView? = null
+
+    // Service connection
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            addStatusMessage("SYSTEM", "Service connected successfully")
+            val binder = service as CameraService.CameraBinder
+            cameraService = binder.getService()
+
+            // Set MainActivity as callback to receive ML detection data
+            binder.setMainActivityCallback(this@MainActivity)
+
+            isServiceRunning = true
+            serviceBound = true
+
+            addStatusMessage("SYSTEM", "ML callbacks connected - motion detection active")
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            addStatusMessage("SYSTEM", "Service disconnected")
+            isServiceRunning = false
+            serviceBound = false
+            cameraService = null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        addStatusMessage("SYSTEM", "MainActivity created - checking permissions")
+        addStatusMessage("SYSTEM", "MainActivity created - checking permissions and service status")
 
         setContent {
             SurveillanceCameraTheme {
@@ -84,6 +125,51 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
         }
 
         checkPermissions()
+
+        // Add lifecycle observer to handle app state changes
+        lifecycle.addObserver(object : LifecycleEventObserver {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> {
+                        addStatusMessage("SYSTEM", "App resumed - checking service status")
+                        checkServiceStatus()
+                    }
+                    Lifecycle.Event.ON_PAUSE -> {
+                        addStatusMessage("SYSTEM", "App paused")
+                    }
+                    else -> {}
+                }
+            }
+        })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Force check service status when activity resumes
+        checkServiceStatus()
+    }
+
+    private fun checkServiceStatus() {
+        val isRunning = isServiceRunning(CameraService::class.java)
+        if (isRunning != isServiceRunning) {
+            isServiceRunning = isRunning
+            addStatusMessage("SYSTEM", "Service status updated: ${if (isRunning) "ACTIVE" else "STOPPED"}")
+        }
+
+        if (isRunning && !serviceBound) {
+            // Service is running but we're not bound to it - bind now
+            bindToService()
+        }
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun initializeMLService() {
@@ -110,16 +196,16 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
                 )
             }
         ) { paddingValues ->
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Left half - Camera preview
+                // Top half - Camera preview (16:9 aspect ratio)
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .weight(0.55f) // Slightly more than half for 16:9 aspect ratio
                         .background(Color.Black)
                 ) {
                     CameraPreview()
@@ -128,11 +214,11 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
                     StatusOverlay()
                 }
 
-                // Right half - Status panel
+                // Bottom half - Status panel
                 StatusPanel(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .weight(0.45f) // Slightly less than half
                 )
             }
         }
@@ -140,17 +226,13 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
 
     @Composable
     fun CameraPreview() {
-        val context = LocalContext.current
-        val lifecycleOwner = LocalLifecycleOwner.current
-
-        // Check if camera permission is granted before attempting to initialize
+        // Check if camera permission is granted
         val hasCameraPermission = ContextCompat.checkSelfPermission(
-            context,
+            this,
             Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!hasCameraPermission) {
-            // Show placeholder when no camera permission
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -164,32 +246,37 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
             return
         }
 
+        if (!serviceBound) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📹 Connecting to Camera Service...",
+                    color = Color.White,
+                    fontSize = 16.sp
+                )
+            }
+            return
+        }
+
+        // Create PreviewView and connect to service
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
+                previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
+                currentPreviewView = previewView
 
-                try {
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-
-                    cameraProviderFuture.addListener({
-                        try {
-                          val cameraProvider = cameraProviderFuture.get()
-                          val preview = CameraXPreview.Builder().build()
-                          val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                          preview.setSurfaceProvider(previewView.surfaceProvider)
-
-                          cameraProvider.unbindAll()
-                          cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview)
-
-                          addStatusMessage("CAMERA", "Camera preview initialized successfully")
-                        } catch (exc: Exception) {
-                            addStatusMessage("ERROR", "Camera binding failed: ${exc.message}")
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
-
-                } catch (exc: Exception) {
-                    addStatusMessage("ERROR", "Camera provider failed: ${exc.message}")
+                // Connect this preview to the service's camera
+                if (serviceBound && cameraService != null) {
+                    try {
+                        val serviceConnection = this.serviceConnection
+                        val binder = serviceConnection as? ServiceConnection
+                        // Connect through service binder
+                        addStatusMessage("CAMERA", "Connecting UI preview to service camera...")
+                    } catch (e: Exception) {
+                        addStatusMessage("ERROR", "Failed to connect preview: ${e.message}")
+                    }
                 }
 
                 previewView
@@ -410,61 +497,108 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
 
     private fun addStatusMessage(type: String, message: String, processingTime: Long = 0) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
-        statusMessages.add(StatusMessage(timestamp, type, message, processingTime))
+        val statusMessage = StatusMessage(timestamp, type, message, processingTime)
 
-        // Keep only last 100 messages to prevent memory issues
-        if (statusMessages.size > 100) {
-            statusMessages.removeAt(0)
+        runOnUiThread {
+            statusMessages.add(statusMessage)
+
+            // Keep only last 100 messages to prevent memory issues
+            if (statusMessages.size > 100) {
+                statusMessages.removeAt(0)
+            }
         }
+
+        Log.d(TAG, "[$type] $message")
     }
 
     private fun checkPermissions() {
-        val permissionsToRequest = mutableListOf(
+        val requiredPermissions = arrayOf(
             Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.POST_NOTIFICATIONS
+        ).toMutableList()
+
+        // Add camera foreground service permission for Android 14+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            requiredPermissions.add(Manifest.permission.FOREGROUND_SERVICE_CAMERA)
         }
 
-        val permissionsNotGranted = permissionsToRequest.filter {
+        val permissionsToRequest = requiredPermissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
+        }
 
-        if (permissionsNotGranted.isNotEmpty()) {
-            requestPermissionLauncher.launch(permissionsNotGranted)
+        if (permissionsToRequest.isEmpty()) {
+            addStatusMessage("SYSTEM", "All permissions granted - starting service")
+            startCameraService()
         } else {
-            requestBatteryOptimization()
+            addStatusMessage("SYSTEM", "Requesting permissions: ${permissionsToRequest.joinToString(", ")}")
+            requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
+        }
+    }
+
+    private fun startCameraService() {
+        // First, ensure any old service instances are stopped
+        stopAnyExistingService()
+
+        if (!isServiceRunning(CameraService::class.java)) {
+            addStatusMessage("SYSTEM", "Starting fresh camera service...")
+            val serviceIntent = Intent(this, CameraService::class.java)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } else {
+            addStatusMessage("SYSTEM", "Camera service already running")
+        }
+
+        // Bind to the service to get updates
+        bindToService()
+    }
+
+    private fun stopAnyExistingService() {
+        try {
+            // Stop any existing service instance
+            val serviceIntent = Intent(this, CameraService::class.java)
+            stopService(serviceIntent)
+            addStatusMessage("SYSTEM", "Stopped any existing service instances")
+
+            // Give it a moment to clean up
+            Thread.sleep(500)
+        } catch (e: Exception) {
+            addStatusMessage("ERROR", "Error stopping existing service: ${e.message}")
+        }
+    }
+
+    private fun bindToService() {
+        if (!serviceBound) {
+            val serviceIntent = Intent(this, CameraService::class.java)
+            bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
         }
     }
 
     private fun requestBatteryOptimization() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent()
-            val packageName = packageName
-            val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                intent.data = Uri.parse("package:$packageName")
-                startActivity(intent)
-            } else {
-                startCameraService()
+            addStatusMessage("SYSTEM", "Requesting battery optimization exemption")
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
             }
-        } else {
-            startCameraService()
+            startActivity(intent)
         }
-    }
 
-    private fun startCameraService() {
-        isServiceRunning = true
-        addStatusMessage("SERVICE", "Starting camera service with ML detection")
-        val intent = Intent(this, CameraService::class.java)
-        ContextCompat.startForegroundService(this, intent)
+        // Start the service after battery optimization request
+        startCameraService()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        mlService?.cleanup()
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
+        }
+        addStatusMessage("SYSTEM", "MainActivity destroyed")
     }
 }
 

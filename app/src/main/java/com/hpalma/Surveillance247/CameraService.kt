@@ -9,12 +9,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -43,6 +45,41 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
     // Storage directories
     private lateinit var videoDir: File
     private lateinit var faceDir: File
+
+    // Service binder for MainActivity communication
+    private var mainActivityCallback: MLDetectionService.DetectionCallback? = null
+
+    // Camera preview sharing
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var preview: Preview? = null
+    private var previewView: PreviewView? = null
+
+    inner class CameraBinder : Binder() {
+        fun getService(): CameraService = this@CameraService
+        fun setMainActivityCallback(callback: MLDetectionService.DetectionCallback) {
+            mainActivityCallback = callback
+        }
+
+        // Share preview surface with UI
+        fun connectPreviewView(previewView: PreviewView) {
+            this@CameraService.previewView = previewView
+            preview?.setSurfaceProvider(previewView.surfaceProvider)
+            Log.d(TAG, "Preview connected to UI")
+        }
+
+        fun disconnectPreviewView() {
+            preview?.setSurfaceProvider(null)
+            this@CameraService.previewView = null
+            Log.d(TAG, "Preview disconnected from UI")
+        }
+    }
+
+    private val binder = CameraBinder()
+
+    override fun onBind(intent: Intent): IBinder {
+        super.onBind(intent)
+        return binder
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -89,7 +126,7 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
             val cameraProvider = cameraProviderFuture.get()
 
             // Preview use case
-            val preview = Preview.Builder().build()
+            preview = Preview.Builder().build()
 
             // Image capture use case
             imageCapture = ImageCapture.Builder().build()
@@ -116,6 +153,7 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
                     imageCapture,
                     imageAnalyzer
                 )
+                this.cameraProvider = cameraProvider // Save for preview sharing
                 Log.d(TAG, "Camera bound successfully with ML analysis")
             } catch (exc: Exception) {
                 Log.e(TAG, "Camera binding failed", exc)
@@ -123,10 +161,13 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    // ML Detection Callbacks
+    // ML Detection Callbacks - Forward to MainActivity
     override fun onObjectDetected(objects: List<String>, confidence: Float) {
         Log.d(TAG, "Objects detected: ${objects.joinToString(", ")} (confidence: $confidence)")
         updateNotification("Objects detected: ${objects.joinToString(", ")}")
+
+        // Forward to MainActivity
+        mainActivityCallback?.onObjectDetected(objects, confidence)
     }
 
     override fun onFaceDetected(faceCount: Int, faceBitmap: Bitmap?) {
@@ -136,14 +177,22 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
         faceBitmap?.let { bitmap ->
             saveFaceImage(bitmap)
         }
+
+        // Forward to MainActivity
+        mainActivityCallback?.onFaceDetected(faceCount, faceBitmap)
     }
 
     override fun onTextDetected(text: String, location: Rect) {
         Log.d(TAG, "Text detected: $text at location: $location")
-        // TODO: Save OCR results to database in Phase 3
+
+        // Forward to MainActivity
+        mainActivityCallback?.onTextDetected(text, location)
     }
 
     override fun onMotionDetected(motionLevel: Float) {
+        // Forward motion data to MainActivity UI
+        mainActivityCallback?.onMotionDetected(motionLevel)
+
         // Only log significant motion to avoid spam
         if (motionLevel > 0.1f) {
             Log.d(TAG, "Motion detected: $motionLevel")
@@ -151,25 +200,40 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
     }
 
     override fun onRecordingTriggered(reason: String) {
-        Log.i(TAG, "Recording triggered: $reason")
+        isRecording = true
         recordingReason = reason
-        startRecording()
+        Log.d(TAG, "Recording triggered: $reason")
+        updateNotification("Recording: $reason")
+
+        // Forward to MainActivity
+        mainActivityCallback?.onRecordingTriggered(reason)
+
+        // TODO: Implement actual video recording in Phase 3
+        // For now, simulate recording duration
+        Timer().schedule(object : TimerTask() {
+            override fun run() {
+                isRecording = false
+                updateNotification("Monitoring")
+            }
+        }, 30000)
     }
 
     private fun startRecording() {
         if (isRecording) return
 
         isRecording = true
+        recordingReason = "Motion + Object Detection"
         updateNotification("🔴 RECORDING: $recordingReason")
 
         // TODO: Implement actual video recording in Phase 3
         Log.i(TAG, "Video recording started (simulation)")
 
         // Simulate 30-second recording
-        cameraExecutor.execute {
-            Thread.sleep(30000) // 30 seconds
-            stopRecording()
-        }
+        Timer().schedule(object : TimerTask() {
+            override fun run() {
+                stopRecording()
+            }
+        }, 30000)
     }
 
     private fun stopRecording() {
@@ -203,6 +267,7 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         val notification = createNotification("Surveillance active - monitoring...")
         startForeground(1, notification)
 
@@ -248,14 +313,11 @@ class CameraService : LifecycleService(), MLDetectionService.DetectionCallback {
             .build()
     }
 
-    override fun onBind(intent: Intent): IBinder? {
-        super.onBind(intent)
-        return null
-    }
-
     // ML Status callback
     override fun onMLStatus(status: String, processingTime: Long) {
-        // Forward ML status to MainActivity if needed
         Log.d(TAG, "ML Status: $status (${processingTime}ms)")
+
+        // Forward to MainActivity
+        mainActivityCallback?.onMLStatus(status, processingTime)
     }
 }

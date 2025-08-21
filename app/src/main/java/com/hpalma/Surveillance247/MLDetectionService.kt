@@ -70,44 +70,22 @@ class MLDetectionService {
         val startTime = System.currentTimeMillis()
         frameCount++
 
-        // Skip frames for performance
-        if (frameSkipCounter++ < frameSkipInterval) {
-            callback?.onMLStatus("Skipping frame ${frameCount} (performance)", 0)
-            imageProxy.close()
-            return
-        }
-        frameSkipCounter = 0
-
-        // Throttle detection to avoid overloading
-        if (startTime - lastDetectionTime < detectionCooldown) {
-            callback?.onMLStatus("Cooling down... (${detectionCooldown - (startTime - lastDetectionTime)}ms)", 0)
-            imageProxy.close()
-            return
-        }
-
-        // Prevent concurrent processing
-        if (isProcessing) {
-            callback?.onMLStatus("Previous frame still processing, skipping", 0)
-            imageProxy.close()
-            return
-        }
-
-        isProcessing = true
-        callback?.onMLStatus("Processing frame ${frameCount}...", 0)
-
         try {
             val bitmap = imageProxyToBitmap(imageProxy)
-            val inputImage = InputImage.fromBitmap(bitmap, imageProxy.imageInfo.rotationDegrees)
 
-            // Step 1: Check for motion first (lightweight)
-            val motionStart = System.currentTimeMillis()
+            // ALWAYS do motion detection (lightweight and fast)
             val motionLevel = detectMotion(bitmap)
             callback?.onMotionDetected(motionLevel)
-            val motionTime = System.currentTimeMillis() - motionStart
 
-            // Step 2: Only do ML analysis if motion detected
-            if (motionLevel > motionThreshold) {
-                callback?.onMLStatus("Motion detected ($motionLevel), starting ML analysis", motionTime)
+            // Only do expensive ML analysis occasionally and when motion is detected
+            val shouldDoMLAnalysis = (frameCount % 10 == 0L) && (motionLevel > motionThreshold) &&
+                                   (startTime - lastDetectionTime > detectionCooldown) && !isProcessing
+
+            if (shouldDoMLAnalysis) {
+                isProcessing = true
+                callback?.onMLStatus("Motion detected ($motionLevel), starting ML analysis", 0)
+
+                val inputImage = InputImage.fromBitmap(bitmap, imageProxy.imageInfo.rotationDegrees)
 
                 // Object detection (primary trigger)
                 objectDetector.process(inputImage)
@@ -132,8 +110,8 @@ class MLDetectionService {
                                 // Also check for faces when recording is triggered
                                 detectFaces(inputImage, bitmap)
 
-                                // Check for text (license plates, signs) - less frequently
-                                if (frameCount % 10 == 0L) { // Only every 10th processed frame
+                                // Check for text (license plates, signs)
+                                if (frameCount % 20 == 0L) {
                                     detectText(inputImage)
                                 }
                             }
@@ -149,16 +127,19 @@ class MLDetectionService {
                         callback?.onMLStatus("Object detection failed: ${e.message}", processingTime)
                         isProcessing = false
                     }
-
             } else {
-                val processingTime = System.currentTimeMillis() - startTime
-                callback?.onMLStatus("No motion detected ($motionLevel)", processingTime)
-                isProcessing = false
+                // Log motion status without expensive ML
+                if (motionLevel > 0.05f) { // Lower threshold for logging
+                    callback?.onMLStatus("Motion: ${String.format("%.3f", motionLevel)}", 0)
+                }
             }
 
             // Store current frame for next motion comparison (downsized for memory)
-            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, false)
-            previousFrame = scaledBitmap
+            if (frameCount % 3 == 0L) { // Only update reference frame every 3rd frame
+                val scaledBitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width / 4, bitmap.height / 4, false)
+                previousFrame?.recycle() // Clean up previous bitmap
+                previousFrame = scaledBitmap
+            }
 
         } catch (e: Exception) {
             val processingTime = System.currentTimeMillis() - startTime
@@ -270,9 +251,12 @@ class MLDetectionService {
 
     fun cleanup() {
         try {
+            previousFrame?.recycle()
+            previousFrame = null
             objectDetector.close()
             faceDetector.close()
             textRecognizer.close()
+            Log.d(TAG, "MLDetectionService cleaned up successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Cleanup failed", e)
         }
