@@ -226,22 +226,39 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
 
     @Composable
     fun CameraPreview() {
-        // Check if camera permission is granted
-        val hasCameraPermission = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
+        // Reactive permission check that updates when permissions change
+        var hasCameraPermission by remember {
+            mutableStateOf(
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            )
+        }
+
+        // Update permission status when activity resumes or permissions change
+        LaunchedEffect(Unit) {
+            hasCameraPermission = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        }
 
         if (!hasCameraPermission) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Camera Permission Required",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "📷 Camera Permission Required",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Grant camera permission to start monitoring",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
             return
         }
@@ -251,37 +268,61 @@ class MainActivity : ComponentActivity(), MLDetectionService.DetectionCallback {
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "📹 Connecting to Camera Service...",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "⚡ Starting Camera Service...",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Initializing background monitoring",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
             return
         }
 
-        // Create PreviewView and connect to service
+        // Create PreviewView that gets preview from service
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
                 previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
                 currentPreviewView = previewView
 
-                // Connect this preview to the service's camera
+                // Connect to service camera preview when both are available
                 if (serviceBound && cameraService != null) {
                     try {
+                        // Get service connection and connect preview
                         val serviceConnection = this.serviceConnection
-                        val binder = serviceConnection as? ServiceConnection
-                        // Connect through service binder
-                        addStatusMessage("CAMERA", "Connecting UI preview to service camera...")
+                        if (serviceConnection is ServiceConnection) {
+                            addStatusMessage("CAMERA", "Connecting UI preview to service...")
+                        }
                     } catch (e: Exception) {
-                        addStatusMessage("ERROR", "Failed to connect preview: ${e.message}")
+                        addStatusMessage("ERROR", "Preview connection failed: ${e.message}")
                     }
                 }
 
                 previewView
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            update = { previewView ->
+                // Connect to service preview when service becomes available
+                if (serviceBound && cameraService != null && currentPreviewView != null) {
+                    try {
+                        // TODO: Connect service camera preview to this UI preview
+                        // This requires the service to provide its Preview surface
+                        addStatusMessage("CAMERA", "Attempting to connect service preview...")
+                    } catch (e: Exception) {
+                        addStatusMessage("ERROR", "Failed to connect preview: ${e.message}")
+                    }
+                }
+            }
         )
     }
 
